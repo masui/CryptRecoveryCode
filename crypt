@@ -1,0 +1,93 @@
+# coding: utf-8
+#
+# 二段階認証でよく出てくるリカバリコードをパスワードで暗号化する
+#
+
+require "io/console"
+require "digest/md5"
+
+#
+# 以下のいずれにも対応するようにする
+#
+# % crypt ABC
+# % echo ABC | crypt
+# % crypt recovery.txt
+#
+
+#
+# 変換したいリカバリコードを data[] に格納
+#
+arg = ARGV[0]
+if !arg then
+  data = ARGF.readlines
+elsif File.exist?(arg) then
+  data = File.open(arg).readlines
+else
+  data = [arg]
+end
+
+def usage
+  STDERR.puts "% crypt crypted-code"
+  exit
+end
+
+usage if data.length == 0
+
+#
+# ユーザの端末からパスワードを取得
+#
+STDERR.print "enter password > "
+pass = IO.console.noecho(&:gets)
+STDERR.print "\n"
+usage unless pass && pass.length > 0
+
+charsets = [
+  "0123456789",
+  "0123456789ABCDEF",
+  "0123456789abcdef",
+  "abcdefghijklmnopqrstuvwxyz",
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  "abcdefghijklmnopqrstuvwxyz0123456789",
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+]
+
+def crypt_char(charset, c, n)
+  if charset.index(c) then
+    cind = charset.index(c)
+    len = charset.length
+    ind = (n - cind + len) % len
+    charset[ind]
+  else
+    c
+  end
+end
+
+def crypt_string(charset,s,md5)
+  out = ''
+  s.split(//).each_with_index { |c,ind|
+    start = (ind % 8) * 4
+    n = md5[start..start+3].hex
+    out += crypt_char(charset,c,n)
+  }
+  out
+end
+
+data.each { |d|
+  str = d.chomp
+  # puts "prcess #{str} with password #{pass}"
+
+  charset = nil
+  charsets.each { |s|
+    regexp = Regexp.new("^[#{s}\\-\\=\\s]*$")
+    if regexp.match(str)
+      charset = s
+      break
+    end
+  }
+  exit unless charset
+  
+  md5 = Digest::MD5.hexdigest(pass)
+  puts crypt_string(charset,str,md5)
+}
